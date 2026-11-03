@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智慧仓储管理系统</title>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --danger: #dc2626;
+    --ok: #16a34a;
+    --warn: #d97706;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
+  header { background: var(--primary); color: #fff; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header .status { font-size: 12px; opacity: .9; }
+  nav { display: flex; gap: 4px; background: var(--card); padding: 0 32px; border-bottom: 1px solid var(--border); }
+  nav button { border: none; background: none; padding: 14px 20px; font-size: 14px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+  nav button.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  main { padding: 24px 32px; max-width: 1200px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .card { background: var(--card); border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card h2 { font-size: 15px; margin-bottom: 14px; color: var(--text); }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  input, select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none; }
+  input:focus, select:focus { border-color: var(--primary); }
+  .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; background: var(--primary); color: #fff; }
+  .btn:hover { background: var(--primary-dark); }
+  .btn.gray { background: #94a3b8; }
+  .btn.gray:hover { background: #64748b; }
+  .btn.red { background: var(--danger); }
+  .btn.green { background: var(--ok); }
+  .btn.sm { padding: 4px 10px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+  th { color: var(--muted); font-weight: 600; background: #f8fafc; }
+  tr:hover td { background: #f8fafc; }
+  .pager { display: flex; gap: 8px; margin-top: 12px; align-items: center; justify-content: flex-end; color: var(--muted); font-size: 13px; }
+  .tag { padding: 2px 10px; border-radius: 999px; font-size: 12px; }
+  .tag.on { background: #dcfce7; color: #15803d; }
+  .tag.off { background: #fee2e2; color: #b91c1c; }
+  .tag.CRITICAL { background: #fee2e2; color: #b91c1c; }
+  .tag.WARNING { background: #ffedd5; color: #c2410c; }
+  .tag.NOTICE { background: #dbeafe; color: #1d4ed8; }
+  .tag.IN { background: #dcfce7; color: #15803d; }
+  .tag.OUT { background: #dbeafe; color: #1d4ed8; }
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field select { width: 100%; }
+  .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: #fff; font-size: 13px; display: none; z-index: 99; }
+  .toast.ok { background: var(--ok); }
+  .toast.err { background: var(--danger); }
+  .modal-mask { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: none; justify-content: center; align-items: center; z-index: 50; }
+  .modal { background: #fff; border-radius: 10px; padding: 24px; width: 640px; max-width: 92vw; max-height: 88vh; overflow: auto; }
+  .modal h3 { margin-bottom: 16px; font-size: 16px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  .empty { text-align: center; color: var(--muted); padding: 30px 0; }
+  .low-stock { color: var(--danger); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>智慧仓储管理系统</h1>
+  <div class="status" id="connStatus">连接中…</div>
+</header>
+
+<nav>
+  <button class="active" data-panel="product">商品管理</button>
+  <button data-panel="inventory">库存管理</button>
+  <button data-panel="stock">出入库管理</button>
+  <button data-panel="alert">库存预警</button>
+</nav>
+
+<main>
+  <!-- 商品管理 -->
+  <section class="panel active" id="panel-product">
+    <div class="card">
+      <h2>商品列表</h2>
+      <div class="toolbar">
+        <input id="productKeyword" placeholder="搜索名称 / SKU / 条形码" style="width:240px" onkeydown="if(event.key==='Enter')loadProducts(1)">
+        <button class="btn" onclick="loadProducts(1)">搜索</button>
+        <button class="btn green" onclick="openProductModal()">新增商品</button>
+      </div>
+      <table>
+        <thead><tr>
+          <th>ID</th><th>SKU</th><th>名称</th><th>单位</th><th>单重(kg)</th><th>体积(m³)</th>
+          <th>最低库存</th><th>最高库存</th><th>条形码</th><th>状态</th><th>操作</th>
+        </tr></thead>
+        <tbody id="productBody"></tbody>
+      </table>
+      <div class="pager">
+        <button class="btn gray sm" onclick="loadProducts(productPage-1)">上一页</button>
+        <span id="productPagerInfo"></span>
+        <button class="btn gray sm" onclick="loadProducts(productPage+1)">下一页</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 库存管理 -->
+  <section class="panel" id="panel-inventory">
+    <div class="card">
+      <h2>库存锁定 / 释放</h2>
+      <div class="toolbar">
+        <input id="lockSku" placeholder="SKU 编码，如 SKU0001" style="width:200px">
+        <input id="lockQty" type="number" min="1" value="1" style="width:100px" placeholder="数量">
+        <button class="btn" onclick="doLock()">锁定库存</button>
+        <button class="btn gray" onclick="doUnlock()">释放库存</button>
+        <button class="btn green" onclick="loadInventory()">刷新列表</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>各商品可用库存</h2>
+      <table>
+        <thead><tr><th>SKU</th><th>商品名称</th><th>可用库存</th></tr></thead>
+        <tbody id="inventoryBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 出入库管理 -->
+  <section class="panel" id="panel-stock">
+    <div class="card">
+      <h2>创建出入库单</h2>
+      <div class="form-grid">
+        <div class="field"><label>类型</label>
+          <select id="orderType"><option value="IN">入库</option><option value="OUT">出库</option></select>
+        </div>
+        <div class="field"><label>SKU 编码</label><input id="orderSku" placeholder="SKU0001"></div>
+        <div class="field"><label>数量</label><input id="orderQty" type="number" min="1" value="1"></div>
+        <div class="field"><label>操作人</label><input id="orderOperator" value="admin"></div>
+        <div class="field"><label>备注</label><input id="orderRemark" placeholder="选填"></div>
+      </div>
+      <div class="toolbar" style="margin-top:14px">
+        <button class="btn green" onclick="submitOrder('IN')">提交入库</button>
+        <button class="btn" onclick="submitOrder('OUT')">提交出库</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>出入库单据</h2>
+      <div class="toolbar">
+        <select id="orderFilter" onchange="loadOrders(1)">
+          <option value="">全部类型</option>
+          <option value="IN">仅入库</option>
+          <option value="OUT">仅出库</option>
+        </select>
+      </div>
+      <table>
+        <thead><tr><th>单据编号</th><th>类型</th><th>SKU</th><th>数量</th><th>状态</th><th>操作人</th><th>备注</th><th>时间</th></tr></thead>
+        <tbody id="orderBody"></tbody>
+      </table>
+      <div class="pager">
+        <button class="btn gray sm" onclick="loadOrders(orderPage-1)">上一页</button>
+        <span id="orderPagerInfo"></span>
+        <button class="btn gray sm" onclick="loadOrders(orderPage+1)">下一页</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 库存预警 -->
+  <section class="panel" id="panel-alert">
+    <div class="card">
+      <h2>低库存预警</h2>
+      <div class="toolbar">
+        <button class="btn" onclick="scanAlerts()">立即扫描</button>
+        <button class="btn green" onclick="loadAlerts()">刷新</button>
+        <span style="color:var(--muted);font-size:12px">定时任务每 30 分钟自动扫描一次</span>
+      </div>
+      <table>
+        <thead><tr><th>SKU</th><th>预警类型</th><th>级别</th><th>当前库存</th><th>阈值</th><th>时间</th></tr></thead>
+        <tbody id="alertBody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- 商品编辑弹窗 -->
+<div class="modal-mask" id="productModal">
+  <div class="modal">
+    <h3 id="productModalTitle">新增商品</h3>
+    <div class="form-grid">
+      <div class="field"><label>SKU 编码 *</label><input id="f_skuCode"></div>
+      <div class="field"><label>商品名称 *</label><input id="f_productName"></div>
+      <div class="field"><label>计量单位</label><input id="f_unit" value="件"></div>
+      <div class="field"><label>单重(kg)</label><input id="f_weight" type="number" step="0.001" value="0"></div>
+      <div class="field"><label>体积(m³)</label><input id="f_volume" type="number" step="0.001" value="0"></div>
+      <div class="field"><label>最低库存阈值</label><input id="f_minStock" type="number" value="0"></div>
+      <div class="field"><label>最高库存阈值</label><input id="f_maxStock" type="number" value="0"></div>
+      <div class="field"><label>条形码</label><input id="f_barcode"></div>
+      <div class="field"><label>状态</label>
+        <select id="f_status"><option value="1">上架</option><option value="0">下架</option></select>
+      </div>
+      <div class="field" style="grid-column: 1 / -1"><label>商品描述</label><input id="f_description"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn gray" onclick="closeProductModal()">取消</button>
+      <button class="btn" onclick="saveProduct()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api';
+let productPage = 1, orderPage = 1;
+let editingProductId = null;
+
+/* ---------- 通用 ---------- */
+async function api(path, options) {
+  const res = await fetch(API + path, options);
+  const json = await res.json();
+  if (json.code !== 200) throw new Error(json.message || '请求失败');
+  return json.data;
+}
+
+function toast(msg, ok = true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + (ok ? 'ok' : 'err');
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2500);
+}
+
+function fmtTime(s) { return s ? String(s).replace('T', ' ').substring(0, 19) : '-'; }
+
+/* ---------- 标签页 ---------- */
+document.querySelectorAll('nav button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
+    if (btn.dataset.panel === 'inventory') loadInventory();
+    if (btn.dataset.panel === 'alert') loadAlerts();
+    if (btn.dataset.panel === 'stock' && document.getElementById('orderBody').children.length === 0) loadOrders(1);
+  };
+});
+
+/* ---------- 商品 ---------- */
+async function loadProducts(page) {
+  if (page < 1) return;
+  const kw = document.getElementById('productKeyword').value.trim();
+  try {
+    const data = await api(`/product/page?pageNum=${page}&pageSize=10` + (kw ? `&keyword=${encodeURIComponent(kw)}` : ''));
+    productPage = data.current;
+    const body = document.getElementById('productBody');
+    body.innerHTML = data.records.length === 0
+      ? '<tr><td colspan="11" class="empty">暂无数据</td></tr>'
+      : data.records.map(p => `<tr>
+        <td>${p.id}</td><td>${p.skuCode}</td><td>${esc(p.productName)}</td><td>${esc(p.unit)}</td>
+        <td>${p.weight}</td><td>${p.volume}</td>
+        <td class="${p.minStock > 0 ? '' : ''}">${p.minStock}</td><td>${p.maxStock}</td>
+        <td>${esc(p.barcode)}</td>
+        <td><span class="tag ${p.status === 1 ? 'on' : 'off'}">${p.status === 1 ? '上架' : '下架'}</span></td>
+        <td>
+          <button class="btn sm" onclick='openProductModal(${JSON.stringify(p)})'>编辑</button>
+          <button class="btn red sm" onclick="deleteProduct(${p.id}, '${esc(p.productName)}')">删除</button>
+        </td>
+      </tr>`).join('');
+    document.getElementById('productPagerInfo').textContent = `第 ${data.current} / ${data.pages || 1} 页，共 ${data.total} 条`;
+  } catch (e) { toast(e.message, false); }
+}
+
+async function deleteProduct(id, name) {
+  if (!confirm(`确认删除商品「${name}」？`)) return;
+  try { await api('/product/' + id, { method: 'DELETE' }); toast('删除成功'); loadProducts(productPage); }
+  catch (e) { toast(e.message, false); }
+}
+
+function openProductModal(p) {
+  editingProductId = p ? p.id : null;
+  document.getElementById('productModalTitle').textContent = p ? '编辑商品 #' + p.id : '新增商品';
+  const set = (id, v) => document.getElementById(id).value = v == null ? '' : v;
+  set('f_skuCode', p?.skuCode); set('f_productName', p?.productName); set('f_unit', p?.unit || '件');
+  set('f_weight', p?.weight); set('f_volume', p?.volume); set('f_minStock', p?.minStock);
+  set('f_maxStock', p?.maxStock); set('f_barcode', p?.barcode); set('f_status', p?.status ?? 1);
+  set('f_description', p?.description);
+  document.getElementById('f_skuCode').disabled = !!p;
+  document.getElementById('productModal').style.display = 'flex';
+}
+function closeProductModal() { document.getElementById('productModal').style.display = 'none'; }
+
+async function saveProduct() {
+  const val = id => document.getElementById(id).value;
+  if (!val('f_skuCode') || !val('f_productName')) { toast('SKU 编码和商品名称必填', false); return; }
+  const payload = {
+    skuCode: val('f_skuCode').trim(), productName: val('f_productName').trim(),
+    unit: val('f_unit') || '件', weight: parseFloat(val('f_weight')) || 0,
+    volume: parseFloat(val('f_volume')) || 0, minStock: parseInt(val('f_minStock')) || 0,
+    maxStock: parseInt(val('f_maxStock')) || 0, barcode: val('f_barcode'),
+    description: val('f_description'), status: parseInt(val('f_status'))
+  };
+  try {
+    if (editingProductId) {
+      await api('/product/' + editingProductId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      toast('修改成功');
+    } else {
+      await api('/product', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      toast('新增成功');
+    }
+    closeProductModal();
+    loadProducts(productPage);
+  } catch (e) { toast(e.message, false); }
+}
+
+/* ---------- 库存 ---------- */
+async function loadInventory() {
+  const body = document.getElementById('inventoryBody');
+  body.innerHTML = '<tr><td colspan="3" class="empty">加载中…</td></tr>';
+  try {
+    const data = await api('/product/page?pageNum=1&pageSize=100');
+    const rows = await Promise.all(data.records.map(async p => {
+      let qty = '-';
+      try { qty = await api('/inventory/available/' + encodeURIComponent(p.skuCode)); } catch (e) { qty = '-'; }
+      return `<tr><td>${p.skuCode}</td><td>${esc(p.productName)}</td>
+        <td class="${qty !== '-' && qty < p.minStock ? 'low-stock' : ''}">${qty}${qty !== '-' && qty < p.minStock ? '（低于阈值 ' + p.minStock + '）' : ''}</td></tr>`;
+    }));
+    body.innerHTML = rows.length === 0 ? '<tr><td colspan="3" class="empty">暂无商品</td></tr>' : rows.join('');
+  } catch (e) { body.innerHTML = `<tr><td colspan="3" class="empty">${e.message}</td></tr>`; }
+}
+
+async function doLock() { await lockUnlock('lock', '锁定'); }
+async function doUnlock() { await lockUnlock('unlock', '释放'); }
+async function lockUnlock(action, label) {
+  const sku = document.getElementById('lockSku').value.trim();
+  const qty = parseInt(document.getElementById('lockQty').value);
+  if (!sku || !(qty > 0)) { toast('请填写 SKU 和数量', false); return; }
+  try {
+    const ok = await api(`/inventory/${action}?skuCode=${encodeURIComponent(sku)}&quantity=${qty}`, { method: 'POST' });
+    toast(ok ? `${label}成功` : `${label}失败：库存不足或 SKU 不存在`, ok);
+    if (ok) loadInventory();
+  } catch (e) { toast(e.message, false); }
+}
+
+/* ---------- 出入库 ---------- */
+async function submitOrder(type) {
+  const sku = document.getElementById('orderSku').value.trim();
+  const qty = parseInt(document.getElementById('orderQty').value);
+  if (!sku || !(qty > 0)) { toast('请填写 SKU 和数量', false); return; }
+  const payload = {
+    skuCode: sku, quantity: qty,
+    operator: document.getElementById('orderOperator').value.trim() || 'system',
+    remark: document.getElementById('orderRemark').value.trim()
+  };
+  try {
+    await api(`/stock/${type === 'IN' ? 'inbound' : 'outbound'}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    toast((type === 'IN' ? '入库' : '出库') + '单创建成功');
+    document.getElementById('orderSku').value = '';
+    document.getElementById('orderRemark').value = '';
+    loadOrders(1);
+  } catch (e) { toast(e.message, false); }
+}
+
+async function loadOrders(page) {
+  if (page < 1) return;
+  const type = document.getElementById('orderFilter').value;
+  try {
+    const data = await api(`/stock/page?pageNum=${page}&pageSize=10` + (type ? `&orderType=${type}` : ''));
+    orderPage = data.current;
+    const body = document.getElementById('orderBody');
+    body.innerHTML = data.records.length === 0
+      ? '<tr><td colspan="8" class="empty">暂无单据</td></tr>'
+      : data.records.map(o => `<tr>
+        <td>${o.orderNo}</td>
+        <td><span class="tag ${o.orderType}">${o.orderType === 'IN' ? '入库' : '出库'}</span></td>
+        <td>${o.skuCode}</td><td>${o.quantity}</td><td>${esc(o.status)}</td>
+        <td>${esc(o.operator)}</td><td>${esc(o.remark) || '-'}</td><td>${fmtTime(o.createTime)}</td>
+      </tr>`).join('');
+    document.getElementById('orderPagerInfo').textContent = `第 ${data.current} / ${data.pages || 1} 页，共 ${data.total} 条`;
+  } catch (e) { toast(e.message, false); }
+}
+
+/* ---------- 预警 ---------- */
+async function loadAlerts() {
+  const body = document.getElementById('alertBody');
+  try {
+    const list = await api('/alert/unhandled');
+    body.innerHTML = list.length === 0
+      ? '<tr><td colspan="6" class="empty">暂无未处理预警</td></tr>'
+      : list.map(a => `<tr>
+        <td>${a.skuCode}</td><td>${esc(a.alertType)}</td>
+        <td><span class="tag ${a.alertLevel}">${a.alertLevel}</span></td>
+        <td class="low-stock">${a.currentStock}</td><td>${a.threshold}</td><td>${fmtTime(a.createTime)}</td>
+      </tr>`).join('');
+  } catch (e) { body.innerHTML = `<tr><td colspan="6" class="empty">${e.message}</td></tr>`; }
+}
+
+async function scanAlerts() {
+  try {
+    const list = await api('/alert/scan', { method: 'POST' });
+    toast(list.length > 0 ? `扫描完成，新增 ${list.length} 条预警` : '扫描完成，库存全部正常');
+    loadAlerts();
+  } catch (e) { toast(e.message, false); }
+}
+
+/* ---------- 工具 ---------- */
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ---------- 初始化 ---------- */
+(async function init() {
+  try {
+    await api('/product/page?pageNum=1&pageSize=1');
+    document.getElementById('connStatus').textContent = '● 服务已连接';
+    document.getElementById('connStatus').style.color = '#86efac';
+  } catch (e) {
+    document.getElementById('connStatus').textContent = '● 服务连接失败';
+    document.getElementById('connStatus').style.color = '#fca5a5';
+  }
+  loadProducts(1);
+})();
+</script>
+</body>
+</html>
